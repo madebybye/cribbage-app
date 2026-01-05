@@ -77,10 +77,12 @@ class GameViewModel: ObservableObject {
         if winnerScore >= winningScore {
             winner = "Player \(playerNumber)"
 
-            // Check if opponent got SKUNKED! (30+ points behind)
-            if winnerScore - loserScore >= skunkDifference {
+            // Check if opponent got SKUNKED! (loser has 90 or less when winner hits 121)
+            if winnerScore - loserScore > skunkDifference {
                 showSkunk = true
+                showConfetti = false
             } else {
+                showSkunk = false
                 showConfetti = true
             }
 
