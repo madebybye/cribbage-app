@@ -36,9 +36,11 @@ class GameViewModel: ObservableObject {
 
     @Published var showWinnerModal = false
     @Published var showConfetti = false
+    @Published var showSkunk = false
     @Published var winner: String?
 
     let winningScore = 121
+    let skunkDifference = 30
 
     init() {
         // Load persisted scores
@@ -69,10 +71,19 @@ class GameViewModel: ObservableObject {
     }
 
     func checkForWinner(playerNumber: Int) {
-        let score = playerNumber == 1 ? player1MainScore : player2MainScore
-        if score >= winningScore {
+        let winnerScore = playerNumber == 1 ? player1MainScore : player2MainScore
+        let loserScore = playerNumber == 1 ? player2MainScore : player1MainScore
+
+        if winnerScore >= winningScore {
             winner = "Player \(playerNumber)"
-            showConfetti = true
+
+            // Check if opponent got SKUNKED! (30+ points behind)
+            if winnerScore - loserScore >= skunkDifference {
+                showSkunk = true
+            } else {
+                showConfetti = true
+            }
+
             showWinnerModal = true
         }
     }
@@ -84,6 +95,7 @@ class GameViewModel: ObservableObject {
         player2FloatingScore = 0
         showWinnerModal = false
         showConfetti = false
+        showSkunk = false
         winner = nil
     }
 }
@@ -141,8 +153,15 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
 
+            // SKUNK overlay
+            if viewModel.showSkunk {
+                SkunkView()
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+
             // Crazy flashing New Game button
-            if viewModel.showConfetti {
+            if viewModel.showConfetti || viewModel.showSkunk {
                 CrazyNewGameButton {
                     viewModel.resetGame()
                 }
@@ -254,7 +273,6 @@ struct ConfettiView: View {
     @State private var discoBallRotation: Double = 0
     @State private var discoBallScale: CGFloat = 0.1
     @State private var spotlightRotation: Double = 0
-    @State private var strobeOpacity: Double = 0
     @State private var rainbowHue: Double = 0
     @State private var emojis: [DiscoEmoji] = []
     @State private var winnerTextScale: CGFloat = 0.1
@@ -326,12 +344,6 @@ struct ConfettiView: View {
                     .scaleEffect(winnerTextScale)
                     .offset(y: winnerTextOffset)
                     .position(x: geometry.size.width / 2, y: geometry.size.height / 2 + 100)
-
-                // Strobe effect
-                Rectangle()
-                    .fill(.white)
-                    .opacity(strobeOpacity)
-                    .ignoresSafeArea()
             }
             .onAppear {
                 startDiscoInferno(in: geometry.size)
@@ -360,9 +372,6 @@ struct ConfettiView: View {
             rainbowHue = 1.0
         }
 
-        // Strobe effect
-        startStrobing()
-
         // Emoji explosions from corners
         generateEmojis(in: size)
 
@@ -374,19 +383,6 @@ struct ConfettiView: View {
 
         // Haptic feedback
         startDiscoHaptics()
-    }
-
-    func startStrobing() {
-        for i in 0..<30 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.2) {
-                withAnimation(.easeIn(duration: 0.05)) {
-                    strobeOpacity = 0.4
-                }
-                withAnimation(.easeOut(duration: 0.15)) {
-                    strobeOpacity = 0
-                }
-            }
-        }
     }
 
     func generateEmojis(in size: CGSize) {
@@ -518,6 +514,152 @@ struct DiscoEmojiView: View {
                 }
 
                 withAnimation(.easeIn(duration: 1.0).delay(emoji.delay + 3.0)) {
+                    opacity = 0
+                }
+            }
+    }
+}
+
+// MARK: - SKUNK ATTACK 🦨
+struct SkunkView: View {
+    @State private var skunks: [SpinningSkunk] = []
+    @State private var rainbowHue: Double = 0
+    @State private var skunkTextScale: CGFloat = 0.1
+    @State private var skunkTextRotation: Double = 0
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Rainbow background pulsing
+                LinearGradient(
+                    colors: [
+                        Color(hue: rainbowHue, saturation: 0.8, brightness: 1),
+                        Color(hue: rainbowHue + 0.5, saturation: 0.8, brightness: 1)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                // Spinning skunks everywhere!
+                ForEach(skunks) { skunk in
+                    SpinningSkunkView(skunk: skunk)
+                }
+
+                // "YOU GOT SKUNKED!" text
+                VStack(spacing: 10) {
+                    Text("YOU GOT")
+                        .font(.system(size: 50, weight: .black))
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 10)
+
+                    Text("SKUNKED!")
+                        .font(.system(size: 70, weight: .black))
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 10)
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+                }
+                .scaleEffect(skunkTextScale)
+                .rotationEffect(.degrees(skunkTextRotation))
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            }
+            .onAppear {
+                startSkunkAttack(in: geometry.size)
+            }
+        }
+    }
+
+    func startSkunkAttack(in size: CGSize) {
+        // Generate tons of spinning skunks
+        for i in 0..<60 {
+            let startX = CGFloat.random(in: 0...size.width)
+            let startY = i % 2 == 0 ? CGFloat.random(in: -200...0) : CGFloat.random(in: size.height...(size.height + 200))
+
+            skunks.append(SpinningSkunk(
+                id: i,
+                x: startX,
+                y: startY,
+                targetX: CGFloat.random(in: 0...size.width),
+                targetY: CGFloat.random(in: 0...size.height),
+                scale: CGFloat.random(in: 0.8...2.5),
+                delay: Double(i) * 0.03
+            ))
+        }
+
+        // Text explosion
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.4)) {
+            skunkTextScale = 1.0
+        }
+
+        // Text wobble
+        withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+            skunkTextRotation = 5
+        }
+
+        // Rainbow background
+        withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
+            rainbowHue = 1.0
+        }
+
+        // Haptics
+        startSkunkHaptics()
+    }
+
+    func startSkunkHaptics() {
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+
+        // Intense haptic pattern
+        for i in 0..<25 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.15) {
+                generator.impactOccurred(intensity: 1.0)
+            }
+        }
+    }
+}
+
+struct SpinningSkunk: Identifiable {
+    let id: Int
+    let x: CGFloat
+    let y: CGFloat
+    let targetX: CGFloat
+    let targetY: CGFloat
+    let scale: CGFloat
+    let delay: Double
+}
+
+struct SpinningSkunkView: View {
+    let skunk: SpinningSkunk
+    @State private var position: CGPoint
+    @State private var rotation: Double = 0
+    @State private var opacity: Double = 0
+
+    init(skunk: SpinningSkunk) {
+        self.skunk = skunk
+        _position = State(initialValue: CGPoint(x: skunk.x, y: skunk.y))
+    }
+
+    var body: some View {
+        Text("🦨")
+            .font(.system(size: 60))
+            .scaleEffect(skunk.scale)
+            .rotationEffect(.degrees(rotation))
+            .opacity(opacity)
+            .position(position)
+            .onAppear {
+                // Fly to target
+                withAnimation(.easeOut(duration: 1.2).delay(skunk.delay)) {
+                    position = CGPoint(x: skunk.targetX, y: skunk.targetY)
+                    opacity = 1.0
+                }
+
+                // Spin like crazy (2D only)
+                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false).delay(skunk.delay)) {
+                    rotation = 360
+                }
+
+                // Fade out eventually
+                withAnimation(.easeIn(duration: 1.0).delay(skunk.delay + 4.0)) {
                     opacity = 0
                 }
             }
