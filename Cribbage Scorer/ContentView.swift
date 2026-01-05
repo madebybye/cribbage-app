@@ -140,6 +140,13 @@ struct ContentView: View {
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
+
+            // Crazy flashing New Game button
+            if viewModel.showConfetti {
+                CrazyNewGameButton {
+                    viewModel.resetGame()
+                }
+            }
         }
         .ignoresSafeArea()
         .alert("Reset Game?", isPresented: $showResetConfirmation) {
@@ -149,13 +156,6 @@ struct ContentView: View {
             }
         } message: {
             Text("This will reset both players' scores to 0.")
-        }
-        .alert(viewModel.winner ?? "Winner!", isPresented: $viewModel.showWinnerModal) {
-            Button("New Game") {
-                viewModel.resetGame()
-            }
-        } message: {
-            Text("\(viewModel.winner ?? "Someone") wins with \(viewModel.winner == "Player 1" ? viewModel.player1MainScore : viewModel.player2MainScore) points!")
         }
     }
 }
@@ -249,74 +249,347 @@ struct ScoreButton: View {
     }
 }
 
-// MARK: - Confetti View
+// MARK: - DISCO INFERNO 🪩✨
 struct ConfettiView: View {
-    @State private var confettiPieces: [ConfettiPiece] = []
+    @State private var discoBallRotation: Double = 0
+    @State private var discoBallScale: CGFloat = 0.1
+    @State private var spotlightRotation: Double = 0
+    @State private var strobeOpacity: Double = 0
+    @State private var rainbowHue: Double = 0
+    @State private var emojis: [DiscoEmoji] = []
+    @State private var winnerTextScale: CGFloat = 0.1
+    @State private var winnerTextOffset: CGFloat = -100
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                ForEach(confettiPieces) { piece in
-                    ConfettiPieceView(piece: piece)
+                // Rainbow background alternation
+                LinearGradient(
+                    colors: [
+                        Color(hue: rainbowHue, saturation: 0.6, brightness: 1),
+                        Color(hue: rainbowHue + 0.3, saturation: 0.6, brightness: 1)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                // Spotlights
+                ForEach(0..<3, id: \.self) { index in
+                    SpotlightView(rotation: spotlightRotation + Double(index) * 120)
                 }
+
+                // Emojis exploding from corners
+                ForEach(emojis) { emoji in
+                    DiscoEmojiView(emoji: emoji)
+                }
+
+                // 3D Rotating Disco Ball with Lasers
+                ZStack {
+                    // Laser beams shooting from disco ball
+                    ForEach(0..<8, id: \.self) { index in
+                        LaserBeamView(
+                            rotation: discoBallRotation * 2 + Double(index) * 45,
+                            color: [Color.red, Color.green, Color.blue, Color.purple, Color.cyan, Color.yellow].randomElement()!
+                        )
+                    }
+
+                    // Disco ball shine/glow
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [.white.opacity(0.8), .clear],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 100
+                            )
+                        )
+                        .frame(width: 200, height: 200)
+                        .blur(radius: 30)
+
+                    // Actual disco ball emoji!
+                    Text("🪩")
+                        .font(.system(size: 120))
+                        .shadow(color: .white, radius: 20)
+                        .rotation3DEffect(.degrees(discoBallRotation), axis: (x: 0, y: 1, z: 0))
+                        .rotation3DEffect(.degrees(discoBallRotation * 0.5), axis: (x: 1, y: 0, z: 0))
+                }
+                .scaleEffect(discoBallScale)
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2 - 50)
+
+                // Winner text
+                Text("WINNER!")
+                    .font(.system(size: 60, weight: .black))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.5), radius: 10)
+                    .shadow(color: Color(hue: rainbowHue, saturation: 1, brightness: 1), radius: 20)
+                    .scaleEffect(winnerTextScale)
+                    .offset(y: winnerTextOffset)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2 + 100)
+
+                // Strobe effect
+                Rectangle()
+                    .fill(.white)
+                    .opacity(strobeOpacity)
+                    .ignoresSafeArea()
             }
             .onAppear {
-                generateConfetti(in: geometry.size)
+                startDiscoInferno(in: geometry.size)
             }
         }
     }
 
-    func generateConfetti(in size: CGSize) {
-        confettiPieces = (0..<80).map { _ in
-            ConfettiPiece(
-                x: CGFloat.random(in: 0...size.width),
-                y: CGFloat.random(in: -100...0),
+    func startDiscoInferno(in size: CGSize) {
+        // Disco ball entrance
+        withAnimation(.spring(response: 0.8, dampingFraction: 0.6)) {
+            discoBallScale = 1.0
+        }
+
+        // Continuous disco ball rotation
+        withAnimation(.linear(duration: 3.0).repeatForever(autoreverses: false)) {
+            discoBallRotation = 360
+        }
+
+        // Spotlight sweep
+        withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+            spotlightRotation = 360
+        }
+
+        // Rainbow background cycling
+        withAnimation(.linear(duration: 3.0).repeatForever(autoreverses: false)) {
+            rainbowHue = 1.0
+        }
+
+        // Strobe effect
+        startStrobing()
+
+        // Emoji explosions from corners
+        generateEmojis(in: size)
+
+        // Winner text bounce
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.5).delay(0.3)) {
+            winnerTextScale = 1.0
+            winnerTextOffset = 0
+        }
+
+        // Haptic feedback
+        startDiscoHaptics()
+    }
+
+    func startStrobing() {
+        for i in 0..<30 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.2) {
+                withAnimation(.easeIn(duration: 0.05)) {
+                    strobeOpacity = 0.4
+                }
+                withAnimation(.easeOut(duration: 0.15)) {
+                    strobeOpacity = 0
+                }
+            }
+        }
+    }
+
+    func generateEmojis(in size: CGSize) {
+        let emojiSymbols = ["🎉", "🏆", "💯", "🔥", "👑", "⭐️"]
+        let corners: [(x: CGFloat, y: CGFloat)] = [
+            (0, 0), // Top-left
+            (size.width, 0), // Top-right
+            (0, size.height), // Bottom-left
+            (size.width, size.height) // Bottom-right
+        ]
+
+        for i in 0..<40 {
+            let corner = corners[i % corners.count]
+            let randomEmoji = emojiSymbols.randomElement()!
+            let angle = Double.random(in: 0...(360)) * .pi / 180
+            let distance = CGFloat.random(in: 100...400)
+
+            emojis.append(DiscoEmoji(
+                id: i,
+                symbol: randomEmoji,
+                startX: corner.x,
+                startY: corner.y,
+                targetX: corner.x + cos(angle) * distance,
+                targetY: corner.y + sin(angle) * distance,
                 rotation: Double.random(in: 0...360),
-                scale: CGFloat.random(in: 0.5...1.5),
-                color: [Color.red, Color.blue, Color.green, Color.yellow, Color.orange, Color.purple].randomElement()!,
-                fallDuration: Double.random(in: 2...3.5)
-            )
+                scale: CGFloat.random(in: 0.8...2.0),
+                delay: Double(i) * 0.05
+            ))
+        }
+    }
+
+    func startDiscoHaptics() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+
+        // Rhythmic disco beat haptics
+        for i in 0..<16 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.25) {
+                generator.impactOccurred(intensity: i % 2 == 0 ? 1.0 : 0.5)
+            }
         }
     }
 }
 
-struct ConfettiPiece: Identifiable {
-    let id = UUID()
-    let x: CGFloat
-    let y: CGFloat
+// MARK: - Laser Beam
+struct LaserBeamView: View {
     let rotation: Double
-    let scale: CGFloat
     let color: Color
-    let fallDuration: Double
-}
-
-struct ConfettiPieceView: View {
-    let piece: ConfettiPiece
-    @State private var yOffset: CGFloat = 0
-    @State private var rotation: Double = 0
 
     var body: some View {
         Rectangle()
-            .fill(piece.color)
-            .frame(width: 10, height: 10)
-            .scaleEffect(piece.scale)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        color.opacity(0.8),
+                        color.opacity(0.4),
+                        color.opacity(0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: 4, height: 400)
+            .blur(radius: 3)
             .rotationEffect(.degrees(rotation))
-            .position(x: piece.x, y: piece.y + yOffset)
+            .blendMode(.plusLighter)
+    }
+}
+
+// MARK: - Spotlight
+struct SpotlightView: View {
+    let rotation: Double
+
+    var body: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [Color.yellow.opacity(0.6), Color.yellow.opacity(0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: 100, height: 600)
+            .blur(radius: 30)
+            .rotationEffect(.degrees(rotation))
+            .blendMode(.screen)
+    }
+}
+
+// MARK: - Disco Emoji
+struct DiscoEmoji: Identifiable {
+    let id: Int
+    let symbol: String
+    let startX: CGFloat
+    let startY: CGFloat
+    let targetX: CGFloat
+    let targetY: CGFloat
+    let rotation: Double
+    let scale: CGFloat
+    let delay: Double
+}
+
+struct DiscoEmojiView: View {
+    let emoji: DiscoEmoji
+    @State private var position: CGPoint
+    @State private var rotation: Double = 0
+    @State private var opacity: Double = 0
+
+    init(emoji: DiscoEmoji) {
+        self.emoji = emoji
+        _position = State(initialValue: CGPoint(x: emoji.startX, y: emoji.startY))
+    }
+
+    var body: some View {
+        Text(emoji.symbol)
+            .font(.system(size: 50))
+            .scaleEffect(emoji.scale)
+            .rotationEffect(.degrees(rotation))
+            .opacity(opacity)
+            .position(position)
             .onAppear {
-                withAnimation(
-                    .linear(duration: piece.fallDuration)
-                    .repeatForever(autoreverses: false)
-                ) {
-                    yOffset = UIScreen.main.bounds.height + 100
+                withAnimation(.easeOut(duration: 1.0).delay(emoji.delay)) {
+                    position = CGPoint(x: emoji.targetX, y: emoji.targetY)
+                    rotation = emoji.rotation
+                    opacity = 1.0
                 }
 
-                withAnimation(
-                    .linear(duration: 1)
-                    .repeatForever(autoreverses: false)
-                ) {
-                    rotation = 360
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(emoji.delay + 1.0)) {
+                    rotation += 360
+                }
+
+                withAnimation(.easeIn(duration: 1.0).delay(emoji.delay + 3.0)) {
+                    opacity = 0
                 }
             }
+    }
+}
+
+// MARK: - Crazy New Game Button
+struct CrazyNewGameButton: View {
+    let action: () -> Void
+    @State private var scale: CGFloat = 1.0
+    @State private var rotation: Double = 0
+    @State private var glowIntensity: Double = 0
+    @State private var rainbowHue: Double = 0
+
+    var body: some View {
+        Button(action: action) {
+            Text("NEW GAME")
+                .font(.system(size: 36, weight: .black))
+                .foregroundColor(.white)
+                .padding(.horizontal, 40)
+                .padding(.vertical, 20)
+                .background(
+                    ZStack {
+                        // Rainbow animated background
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(hue: rainbowHue, saturation: 1, brightness: 1),
+                                        Color(hue: rainbowHue + 0.3, saturation: 1, brightness: 1)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+
+                        // Pulsing glow
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white, lineWidth: 4)
+                            .blur(radius: glowIntensity)
+                    }
+                )
+                .shadow(color: Color(hue: rainbowHue, saturation: 1, brightness: 1), radius: 20)
+                .scaleEffect(scale)
+                .rotation3DEffect(.degrees(rotation), axis: (x: 0, y: 1, z: 0))
+        }
+        .position(x: UIScreen.main.bounds.width / 2, y: UIScreen.main.bounds.height / 2 + 200)
+        .onAppear {
+            startCrazyAnimations()
+        }
+    }
+
+    func startCrazyAnimations() {
+        // Pulsing scale
+        withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+            scale = 1.2
+        }
+
+        // Rainbow color cycle
+        withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
+            rainbowHue = 1.0
+        }
+
+        // Glow pulse
+        withAnimation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true)) {
+            glowIntensity = 10
+        }
+
+        // Subtle 3D rotation
+        withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+            rotation = 360
+        }
     }
 }
 
