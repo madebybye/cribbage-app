@@ -50,19 +50,19 @@ class GameViewModel: ObservableObject {
 
     func addToFloatingScore(player: Int, value: Int) {
         if player == 1 {
-            player1FloatingScore = max(0, player1FloatingScore + value)
+            player1FloatingScore += value
         } else {
-            player2FloatingScore = max(0, player2FloatingScore + value)
+            player2FloatingScore += value
         }
     }
 
     func commitFloatingScore(player: Int) {
         if player == 1 {
-            player1MainScore = max(0, player1MainScore + player1FloatingScore)
+            player1MainScore += player1FloatingScore
             player1FloatingScore = 0
             checkForWinner(playerNumber: 1)
         } else {
-            player2MainScore = max(0, player2MainScore + player2FloatingScore)
+            player2MainScore += player2FloatingScore
             player2FloatingScore = 0
             checkForWinner(playerNumber: 2)
         }
