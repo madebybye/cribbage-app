@@ -8,43 +8,41 @@
 import SwiftUI
 import Combine
 
+// MARK: - Game Model
+struct Game: Identifiable, Codable {
+    let id: UUID
+    var name: String
+    var player1MainScore: Int
+    var player2MainScore: Int
+    var player1GamesWon: Int
+    var player2GamesWon: Int
+
+    init(id: UUID = UUID(), name: String = "Player 1 vs Player 2", player1MainScore: Int = 0, player2MainScore: Int = 0, player1GamesWon: Int = 0, player2GamesWon: Int = 0) {
+        self.id = id
+        self.name = name
+        self.player1MainScore = player1MainScore
+        self.player2MainScore = player2MainScore
+        self.player1GamesWon = player1GamesWon
+        self.player2GamesWon = player2GamesWon
+    }
+}
+
 // MARK: - Game View Model
 class GameViewModel: ObservableObject {
-    @Published var player1MainScore: Int {
+    @Published var games: [Game] = [] {
         didSet {
-            UserDefaults.standard.set(player1MainScore, forKey: "player1MainScore")
+            saveGames()
+        }
+    }
+    @Published var activeGameID: UUID? {
+        didSet {
+            UserDefaults.standard.set(activeGameID?.uuidString, forKey: "activeGameID")
+            saveActiveGameState()
         }
     }
 
-    @Published var player1FloatingScore: Int {
-        didSet {
-            UserDefaults.standard.set(player1FloatingScore, forKey: "player1FloatingScore")
-        }
-    }
-
-    @Published var player2MainScore: Int {
-        didSet {
-            UserDefaults.standard.set(player2MainScore, forKey: "player2MainScore")
-        }
-    }
-
-    @Published var player2FloatingScore: Int {
-        didSet {
-            UserDefaults.standard.set(player2FloatingScore, forKey: "player2FloatingScore")
-        }
-    }
-
-    @Published var player1GamesWon: Int {
-        didSet {
-            UserDefaults.standard.set(player1GamesWon, forKey: "player1GamesWon")
-        }
-    }
-
-    @Published var player2GamesWon: Int {
-        didSet {
-            UserDefaults.standard.set(player2GamesWon, forKey: "player2GamesWon")
-        }
-    }
+    @Published var player1FloatingScore: Int = 0
+    @Published var player2FloatingScore: Int = 0
 
     @Published var showWinnerModal = false
     @Published var showConfetti = false
@@ -55,14 +53,80 @@ class GameViewModel: ObservableObject {
     let winningScore = 121
     let skunkDifference = 30
 
+    // Computed properties for active game
+    var player1MainScore: Int {
+        get { activeGame?.player1MainScore ?? 0 }
+        set {
+            if let index = games.firstIndex(where: { $0.id == activeGameID }) {
+                games[index].player1MainScore = newValue
+            }
+        }
+    }
+
+    var player2MainScore: Int {
+        get { activeGame?.player2MainScore ?? 0 }
+        set {
+            if let index = games.firstIndex(where: { $0.id == activeGameID }) {
+                games[index].player2MainScore = newValue
+            }
+        }
+    }
+
+    var player1GamesWon: Int {
+        get { activeGame?.player1GamesWon ?? 0 }
+        set {
+            if let index = games.firstIndex(where: { $0.id == activeGameID }) {
+                games[index].player1GamesWon = newValue
+            }
+        }
+    }
+
+    var player2GamesWon: Int {
+        get { activeGame?.player2GamesWon ?? 0 }
+        set {
+            if let index = games.firstIndex(where: { $0.id == activeGameID }) {
+                games[index].player2GamesWon = newValue
+            }
+        }
+    }
+
+    var activeGame: Game? {
+        games.first(where: { $0.id == activeGameID })
+    }
+
     init() {
-        // Load persisted scores
-        self.player1MainScore = UserDefaults.standard.integer(forKey: "player1MainScore")
-        self.player1FloatingScore = UserDefaults.standard.integer(forKey: "player1FloatingScore")
-        self.player2MainScore = UserDefaults.standard.integer(forKey: "player2MainScore")
-        self.player2FloatingScore = UserDefaults.standard.integer(forKey: "player2FloatingScore")
-        self.player1GamesWon = UserDefaults.standard.integer(forKey: "player1GamesWon")
-        self.player2GamesWon = UserDefaults.standard.integer(forKey: "player2GamesWon")
+        loadGames()
+        if games.isEmpty {
+            let defaultGame = Game()
+            games.append(defaultGame)
+            activeGameID = defaultGame.id
+        } else if let savedActiveID = UserDefaults.standard.string(forKey: "activeGameID"),
+                  let uuid = UUID(uuidString: savedActiveID) {
+            activeGameID = uuid
+        } else {
+            activeGameID = games.first?.id
+        }
+    }
+
+    private func saveGames() {
+        if let encoded = try? JSONEncoder().encode(games) {
+            UserDefaults.standard.set(encoded, forKey: "games")
+        }
+    }
+
+    private func loadGames() {
+        if let data = UserDefaults.standard.data(forKey: "games"),
+           let decoded = try? JSONDecoder().decode([Game].self, from: data) {
+            games = decoded
+        }
+    }
+
+    private func saveActiveGameState() {
+        // Save floating scores for active game
+        if activeGameID != nil {
+            UserDefaults.standard.set(player1FloatingScore, forKey: "player1FloatingScore")
+            UserDefaults.standard.set(player2FloatingScore, forKey: "player2FloatingScore")
+        }
     }
 
     func addToFloatingScore(player: Int, value: Int) {
@@ -131,6 +195,65 @@ class GameViewModel: ObservableObject {
         player1GamesWon = 0
         player2GamesWon = 0
     }
+
+    // Game management methods
+    func createNewGame(name: String = "Player 1 vs Player 2") {
+        let newGame = Game(name: name)
+        games.append(newGame)
+        switchToGame(id: newGame.id)
+    }
+
+    func deleteGame(id: UUID) {
+        // Don't delete if it's the only game
+        guard games.count > 1 else { return }
+
+        games.removeAll { $0.id == id }
+
+        // If we deleted the active game, switch to first available
+        if id == activeGameID {
+            activeGameID = games.first?.id
+            player1FloatingScore = 0
+            player2FloatingScore = 0
+        }
+    }
+
+    func renameGame(id: UUID, newName: String) {
+        if let index = games.firstIndex(where: { $0.id == id }) {
+            games[index].name = newName
+        }
+    }
+
+    func updateGame(id: UUID, newName: String, player1GamesWon: Int, player2GamesWon: Int) {
+        if let index = games.firstIndex(where: { $0.id == id }) {
+            games[index].name = newName
+            games[index].player1GamesWon = player1GamesWon
+            games[index].player2GamesWon = player2GamesWon
+        }
+    }
+
+    func switchToGame(id: UUID) {
+        // Save current floating scores before switching
+        saveActiveGameState()
+
+        activeGameID = id
+
+        // Load floating scores for new game or reset them
+        if let savedP1 = UserDefaults.standard.object(forKey: "player1FloatingScore") as? Int,
+           let savedP2 = UserDefaults.standard.object(forKey: "player2FloatingScore") as? Int {
+            player1FloatingScore = savedP1
+            player2FloatingScore = savedP2
+        } else {
+            player1FloatingScore = 0
+            player2FloatingScore = 0
+        }
+
+        // Reset celebration states
+        showWinnerModal = false
+        showConfetti = false
+        showSkunk = false
+        winner = nil
+        skunkedPlayer = nil
+    }
 }
 
 // MARK: - Content View
@@ -138,6 +261,7 @@ struct ContentView: View {
     @StateObject private var viewModel = GameViewModel()
     @State private var showResetConfirmation = false
     @State private var showResetGamesWonConfirmation = false
+    @State private var showGameList = false
 
     // Danger color for when player is 30+ points behind (#EE0000)
     let dangerColor = Color(red: 0xEE / 255.0, green: 0x00 / 255.0, blue: 0x00 / 255.0)
@@ -170,6 +294,9 @@ struct ContentView: View {
                     },
                     onLongPress: {
                         showResetConfirmation = true
+                    },
+                    onGamesWonTap: {
+                        showGameList = true
                     },
                     onGamesWonLongPress: {
                         showResetGamesWonConfirmation = true
@@ -221,6 +348,9 @@ struct ContentView: View {
                     onLongPress: {
                         showResetConfirmation = true
                     },
+                    onGamesWonTap: {
+                        showGameList = true
+                    },
                     onGamesWonLongPress: {
                         showResetGamesWonConfirmation = true
                     }
@@ -266,6 +396,9 @@ struct ContentView: View {
         } message: {
             Text("This will reset the games won tally to 0 for both players. This cannot be undone.")
         }
+        .sheet(isPresented: $showGameList) {
+            GameListSheet(viewModel: viewModel)
+        }
     }
 }
 
@@ -280,6 +413,7 @@ struct PlayerSection: View {
     let onScoreButtonTap: (Int) -> Void
     let onFloatingScoreTap: () -> Void
     let onLongPress: () -> Void
+    let onGamesWonTap: () -> Void
     let onGamesWonLongPress: () -> Void
 
     // Adjustable margin from middle divider
@@ -343,6 +477,9 @@ struct PlayerSection: View {
                         .font(.system(size: 45, weight: .medium))
                         .foregroundColor(foregroundColor.opacity(0.6))
                         .rotationEffect(.degrees(isRotated ? 90 : -90))
+                        .onTapGesture {
+                            onGamesWonTap()
+                        }
                         .onLongPressGesture {
                             onGamesWonLongPress()
                         }
@@ -845,6 +982,142 @@ struct CrazyNewGameButton: View {
         withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
             rotation = 360
         }
+    }
+}
+
+// MARK: - Game List Sheet
+struct GameListSheet: View {
+    @ObservedObject var viewModel: GameViewModel
+    @Environment(\.dismiss) var dismiss
+    @State private var showNewGameAlert = false
+    @State private var newGameName = ""
+    @State private var gameToDelete: UUID?
+    @State private var showDeleteConfirmation = false
+    @State private var gameToRename: UUID?
+    @State private var showRenameAlert = false
+    @State private var renameGameName = ""
+    @State private var renamePlayer1GamesWon = ""
+    @State private var renamePlayer2GamesWon = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(viewModel.games) { game in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(game.name)
+                                .font(.system(size: 17, weight: .medium))
+                            Text("\(game.player1GamesWon)-\(game.player2GamesWon)")
+                                .font(.system(size: 15))
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        // Active game indicator
+                        if game.id == viewModel.activeGameID {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        viewModel.switchToGame(id: game.id)
+                        dismiss()
+                    }
+                    .onLongPressGesture {
+                        gameToRename = game.id
+                        renameGameName = game.name
+                        renamePlayer1GamesWon = String(game.player1GamesWon)
+                        renamePlayer2GamesWon = String(game.player2GamesWon)
+                        showRenameAlert = true
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            gameToDelete = game.id
+                            showDeleteConfirmation = true
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Games")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Close")
+                            .font(.system(size: 17))
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showNewGameAlert = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .medium))
+                    }
+                }
+            }
+            .alert("New Game", isPresented: $showNewGameAlert) {
+                TextField("Game Name", text: $newGameName)
+                Button("Cancel", role: .cancel) {
+                    newGameName = ""
+                }
+                Button("Create") {
+                    let name = newGameName.isEmpty ? "Player 1 vs Player 2" : newGameName
+                    viewModel.createNewGame(name: name)
+                    newGameName = ""
+                    dismiss()
+                }
+            } message: {
+                Text("Enter a name for the new game (e.g., \"Robert vs Natalie\")")
+            }
+            .alert("Delete Game?", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    gameToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    if let id = gameToDelete {
+                        viewModel.deleteGame(id: id)
+                    }
+                    gameToDelete = nil
+                }
+            } message: {
+                Text("This will permanently delete this game and all its scores. This cannot be undone.")
+            }
+            .alert("Edit Game", isPresented: $showRenameAlert) {
+                TextField("Game Name", text: $renameGameName)
+                TextField("Player 1 Games Won", text: $renamePlayer1GamesWon)
+                    .keyboardType(.numberPad)
+                TextField("Player 2 Games Won", text: $renamePlayer2GamesWon)
+                    .keyboardType(.numberPad)
+                Button("Cancel", role: .cancel) {
+                    gameToRename = nil
+                    renameGameName = ""
+                    renamePlayer1GamesWon = ""
+                    renamePlayer2GamesWon = ""
+                }
+                Button("Save") {
+                    if let id = gameToRename, !renameGameName.isEmpty {
+                        let p1GamesWon = Int(renamePlayer1GamesWon) ?? 0
+                        let p2GamesWon = Int(renamePlayer2GamesWon) ?? 0
+                        viewModel.updateGame(id: id, newName: renameGameName, player1GamesWon: p1GamesWon, player2GamesWon: p2GamesWon)
+                    }
+                    gameToRename = nil
+                    renameGameName = ""
+                    renamePlayer1GamesWon = ""
+                    renamePlayer2GamesWon = ""
+                }
+            } message: {
+                Text("Edit game name and total games won")
+            }
+        }
+        .presentationDetents([.large])
     }
 }
 
