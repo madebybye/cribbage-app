@@ -36,9 +36,12 @@ class GameViewModel: ObservableObject {
 
     @Published var showWinnerModal = false
     @Published var showConfetti = false
+    @Published var showSkunk = false
     @Published var winner: String?
+    @Published var skunkedPlayer: Int? // 1 or 2, the player who got skunked
 
     let winningScore = 121
+    let skunkDifference = 30
 
     init() {
         // Load persisted scores
@@ -50,29 +53,43 @@ class GameViewModel: ObservableObject {
 
     func addToFloatingScore(player: Int, value: Int) {
         if player == 1 {
-            player1FloatingScore = max(0, player1FloatingScore + value)
+            player1FloatingScore += value
         } else {
-            player2FloatingScore = max(0, player2FloatingScore + value)
+            player2FloatingScore += value
         }
     }
 
     func commitFloatingScore(player: Int) {
         if player == 1 {
-            player1MainScore = max(0, player1MainScore + player1FloatingScore)
+            player1MainScore += player1FloatingScore
             player1FloatingScore = 0
             checkForWinner(playerNumber: 1)
         } else {
-            player2MainScore = max(0, player2MainScore + player2FloatingScore)
+            player2MainScore += player2FloatingScore
             player2FloatingScore = 0
             checkForWinner(playerNumber: 2)
         }
     }
 
     func checkForWinner(playerNumber: Int) {
-        let score = playerNumber == 1 ? player1MainScore : player2MainScore
-        if score >= winningScore {
+        let winnerScore = playerNumber == 1 ? player1MainScore : player2MainScore
+        let loserScore = playerNumber == 1 ? player2MainScore : player1MainScore
+
+        if winnerScore >= winningScore {
             winner = "Player \(playerNumber)"
-            showConfetti = true
+
+            // Check if opponent got SKUNKED! (loser has 90 or less when winner hits 121)
+            if winnerScore - loserScore > skunkDifference {
+                showSkunk = true
+                showConfetti = false
+                // Track which player got skunked (the loser)
+                skunkedPlayer = playerNumber == 1 ? 2 : 1
+            } else {
+                showSkunk = false
+                showConfetti = true
+                skunkedPlayer = nil
+            }
+
             showWinnerModal = true
         }
     }
@@ -84,7 +101,9 @@ class GameViewModel: ObservableObject {
         player2FloatingScore = 0
         showWinnerModal = false
         showConfetti = false
+        showSkunk = false
         winner = nil
+        skunkedPlayer = nil
     }
 }
 
@@ -92,6 +111,18 @@ class GameViewModel: ObservableObject {
 struct ContentView: View {
     @StateObject private var viewModel = GameViewModel()
     @State private var showResetConfirmation = false
+
+    // Danger color for when player is 30+ points behind (#EE0000)
+    let dangerColor = Color(red: 0xEE / 255.0, green: 0x00 / 255.0, blue: 0x00 / 255.0)
+
+    // Check if players are in danger of being skunked
+    var player1InDanger: Bool {
+        viewModel.player2MainScore - viewModel.player1MainScore >= 30
+    }
+
+    var player2InDanger: Bool {
+        viewModel.player1MainScore - viewModel.player2MainScore >= 30
+    }
 
     var body: some View {
         ZStack {
@@ -101,7 +132,7 @@ struct ContentView: View {
                     mainScore: viewModel.player1MainScore,
                     floatingScore: viewModel.player1FloatingScore,
                     backgroundColor: .black,
-                    foregroundColor: .white,
+                    foregroundColor: player1InDanger ? dangerColor : .white,
                     isRotated: true,
                     onScoreButtonTap: { value in
                         viewModel.addToFloatingScore(player: 1, value: value)
@@ -114,12 +145,40 @@ struct ContentView: View {
                     }
                 )
 
+                // Progress bars at the middle divider
+                VStack(spacing: 0) {
+                    // Top player's white progress bar
+                    GeometryReader { geometry in
+                        HStack(spacing: 0) {
+                            Rectangle()
+                                .fill(player1InDanger ? dangerColor : Color.white)
+                                .frame(width: geometry.size.width * CGFloat(min(viewModel.player1MainScore, 121)) / 121.0)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .frame(height: 10)
+                    .background(Color.black)
+
+                    // Bottom player's black progress bar
+                    GeometryReader { geometry in
+                        HStack(spacing: 0) {
+                            Rectangle()
+                                .fill(player2InDanger ? dangerColor : Color.black)
+                                .frame(width: geometry.size.width * CGFloat(min(viewModel.player2MainScore, 121)) / 121.0)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .frame(height: 10)
+                    .background(Color.white)
+                }
+                .frame(height: 20)
+
                 // Bottom Player (Player 2)
                 PlayerSection(
                     mainScore: viewModel.player2MainScore,
                     floatingScore: viewModel.player2FloatingScore,
                     backgroundColor: .white,
-                    foregroundColor: .black,
+                    foregroundColor: player2InDanger ? dangerColor : .black,
                     isRotated: false,
                     onScoreButtonTap: { value in
                         viewModel.addToFloatingScore(player: 2, value: value)
@@ -140,6 +199,20 @@ struct ContentView: View {
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
+
+            // SKUNK overlay
+            if viewModel.showSkunk {
+                SkunkView(skunkedPlayer: viewModel.skunkedPlayer ?? 2)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+
+            // Crazy flashing New Game button
+            if viewModel.showConfetti || viewModel.showSkunk {
+                CrazyNewGameButton {
+                    viewModel.resetGame()
+                }
+            }
         }
         .ignoresSafeArea()
         .alert("Reset Game?", isPresented: $showResetConfirmation) {
@@ -149,13 +222,6 @@ struct ContentView: View {
             }
         } message: {
             Text("This will reset both players' scores to 0.")
-        }
-        .alert(viewModel.winner ?? "Winner!", isPresented: $viewModel.showWinnerModal) {
-            Button("New Game") {
-                viewModel.resetGame()
-            }
-        } message: {
-            Text("\(viewModel.winner ?? "Someone") wins with \(viewModel.winner == "Player 1" ? viewModel.player1MainScore : viewModel.player2MainScore) points!")
         }
     }
 }
@@ -249,74 +315,472 @@ struct ScoreButton: View {
     }
 }
 
-// MARK: - Confetti View
+// MARK: - DISCO INFERNO 🪩✨
 struct ConfettiView: View {
-    @State private var confettiPieces: [ConfettiPiece] = []
+    @State private var discoBallRotation: Double = 0
+    @State private var discoBallScale: CGFloat = 0.1
+    @State private var spotlightRotation: Double = 0
+    @State private var rainbowHue: Double = 0
+    @State private var emojis: [DiscoEmoji] = []
+    @State private var winnerTextScale: CGFloat = 0.1
+    @State private var winnerTextOffset: CGFloat = -100
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                ForEach(confettiPieces) { piece in
-                    ConfettiPieceView(piece: piece)
+                // Rainbow background alternation
+                LinearGradient(
+                    colors: [
+                        Color(hue: rainbowHue, saturation: 0.6, brightness: 1),
+                        Color(hue: rainbowHue + 0.3, saturation: 0.6, brightness: 1)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                // Spotlights
+                ForEach(0..<3, id: \.self) { index in
+                    SpotlightView(rotation: spotlightRotation + Double(index) * 120)
                 }
+
+                // Emojis exploding from corners
+                ForEach(emojis) { emoji in
+                    DiscoEmojiView(emoji: emoji)
+                }
+
+                // 3D Rotating Disco Ball with Lasers
+                ZStack {
+                    // Laser beams shooting from disco ball
+                    ForEach(0..<8, id: \.self) { index in
+                        LaserBeamView(
+                            rotation: discoBallRotation * 2 + Double(index) * 45,
+                            color: [Color.red, Color.green, Color.blue, Color.purple, Color.cyan, Color.yellow].randomElement()!
+                        )
+                    }
+
+                    // Disco ball shine/glow
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [.white.opacity(0.8), .clear],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 100
+                            )
+                        )
+                        .frame(width: 200, height: 200)
+                        .blur(radius: 30)
+
+                    // Actual disco ball emoji!
+                    Text("🪩")
+                        .font(.system(size: 120))
+                        .shadow(color: .white, radius: 20)
+                        .rotation3DEffect(.degrees(discoBallRotation), axis: (x: 0, y: 1, z: 0))
+                        .rotation3DEffect(.degrees(discoBallRotation * 0.5), axis: (x: 1, y: 0, z: 0))
+                }
+                .scaleEffect(discoBallScale)
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2 - 50)
+
+                // Winner text
+                Text("WINNER!")
+                    .font(.system(size: 60, weight: .black))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.5), radius: 10)
+                    .shadow(color: Color(hue: rainbowHue, saturation: 1, brightness: 1), radius: 20)
+                    .scaleEffect(winnerTextScale)
+                    .offset(y: winnerTextOffset)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2 + 100)
             }
             .onAppear {
-                generateConfetti(in: geometry.size)
+                startDiscoInferno(in: geometry.size)
             }
         }
     }
 
-    func generateConfetti(in size: CGSize) {
-        confettiPieces = (0..<80).map { _ in
-            ConfettiPiece(
-                x: CGFloat.random(in: 0...size.width),
-                y: CGFloat.random(in: -100...0),
+    func startDiscoInferno(in size: CGSize) {
+        // Disco ball entrance
+        withAnimation(.spring(response: 0.8, dampingFraction: 0.6)) {
+            discoBallScale = 1.0
+        }
+
+        // Continuous disco ball rotation
+        withAnimation(.linear(duration: 3.0).repeatForever(autoreverses: false)) {
+            discoBallRotation = 360
+        }
+
+        // Spotlight sweep
+        withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+            spotlightRotation = 360
+        }
+
+        // Rainbow background cycling
+        withAnimation(.linear(duration: 3.0).repeatForever(autoreverses: false)) {
+            rainbowHue = 1.0
+        }
+
+        // Emoji explosions from corners
+        generateEmojis(in: size)
+
+        // Winner text bounce
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.5).delay(0.3)) {
+            winnerTextScale = 1.0
+            winnerTextOffset = 0
+        }
+
+        // Haptic feedback
+        startDiscoHaptics()
+    }
+
+    func generateEmojis(in size: CGSize) {
+        let emojiSymbols = ["🎉", "🏆", "💯", "🔥", "👑", "⭐️"]
+        let corners: [(x: CGFloat, y: CGFloat)] = [
+            (0, 0), // Top-left
+            (size.width, 0), // Top-right
+            (0, size.height), // Bottom-left
+            (size.width, size.height) // Bottom-right
+        ]
+
+        for i in 0..<40 {
+            let corner = corners[i % corners.count]
+            let randomEmoji = emojiSymbols.randomElement()!
+            let angle = Double.random(in: 0...(360)) * .pi / 180
+            let distance = CGFloat.random(in: 100...400)
+
+            emojis.append(DiscoEmoji(
+                id: i,
+                symbol: randomEmoji,
+                startX: corner.x,
+                startY: corner.y,
+                targetX: corner.x + cos(angle) * distance,
+                targetY: corner.y + sin(angle) * distance,
                 rotation: Double.random(in: 0...360),
-                scale: CGFloat.random(in: 0.5...1.5),
-                color: [Color.red, Color.blue, Color.green, Color.yellow, Color.orange, Color.purple].randomElement()!,
-                fallDuration: Double.random(in: 2...3.5)
-            )
+                scale: CGFloat.random(in: 0.8...2.0),
+                delay: Double(i) * 0.05
+            ))
+        }
+    }
+
+    func startDiscoHaptics() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+
+        // Rhythmic disco beat haptics
+        for i in 0..<16 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.25) {
+                generator.impactOccurred(intensity: i % 2 == 0 ? 1.0 : 0.5)
+            }
         }
     }
 }
 
-struct ConfettiPiece: Identifiable {
-    let id = UUID()
-    let x: CGFloat
-    let y: CGFloat
+// MARK: - Laser Beam
+struct LaserBeamView: View {
     let rotation: Double
-    let scale: CGFloat
     let color: Color
-    let fallDuration: Double
-}
-
-struct ConfettiPieceView: View {
-    let piece: ConfettiPiece
-    @State private var yOffset: CGFloat = 0
-    @State private var rotation: Double = 0
 
     var body: some View {
         Rectangle()
-            .fill(piece.color)
-            .frame(width: 10, height: 10)
-            .scaleEffect(piece.scale)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        color.opacity(0.8),
+                        color.opacity(0.4),
+                        color.opacity(0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: 4, height: 400)
+            .blur(radius: 3)
             .rotationEffect(.degrees(rotation))
-            .position(x: piece.x, y: piece.y + yOffset)
+            .blendMode(.plusLighter)
+    }
+}
+
+// MARK: - Spotlight
+struct SpotlightView: View {
+    let rotation: Double
+
+    var body: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [Color.yellow.opacity(0.6), Color.yellow.opacity(0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: 100, height: 600)
+            .blur(radius: 30)
+            .rotationEffect(.degrees(rotation))
+            .blendMode(.screen)
+    }
+}
+
+// MARK: - Disco Emoji
+struct DiscoEmoji: Identifiable {
+    let id: Int
+    let symbol: String
+    let startX: CGFloat
+    let startY: CGFloat
+    let targetX: CGFloat
+    let targetY: CGFloat
+    let rotation: Double
+    let scale: CGFloat
+    let delay: Double
+}
+
+struct DiscoEmojiView: View {
+    let emoji: DiscoEmoji
+    @State private var position: CGPoint
+    @State private var rotation: Double = 0
+    @State private var opacity: Double = 0
+
+    init(emoji: DiscoEmoji) {
+        self.emoji = emoji
+        _position = State(initialValue: CGPoint(x: emoji.startX, y: emoji.startY))
+    }
+
+    var body: some View {
+        Text(emoji.symbol)
+            .font(.system(size: 50))
+            .scaleEffect(emoji.scale)
+            .rotationEffect(.degrees(rotation))
+            .opacity(opacity)
+            .position(position)
             .onAppear {
-                withAnimation(
-                    .linear(duration: piece.fallDuration)
-                    .repeatForever(autoreverses: false)
-                ) {
-                    yOffset = UIScreen.main.bounds.height + 100
+                withAnimation(.easeOut(duration: 1.0).delay(emoji.delay)) {
+                    position = CGPoint(x: emoji.targetX, y: emoji.targetY)
+                    rotation = emoji.rotation
+                    opacity = 1.0
                 }
 
-                withAnimation(
-                    .linear(duration: 1)
-                    .repeatForever(autoreverses: false)
-                ) {
-                    rotation = 360
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false).delay(emoji.delay + 1.0)) {
+                    rotation += 360
+                }
+
+                withAnimation(.easeIn(duration: 1.0).delay(emoji.delay + 3.0)) {
+                    opacity = 0
                 }
             }
+    }
+}
+
+// MARK: - SKUNK ATTACK 🦨
+struct SkunkView: View {
+    let skunkedPlayer: Int // 1 = top player, 2 = bottom player
+    @State private var skunks: [SpinningSkunk] = []
+    @State private var rainbowHue: Double = 0
+    @State private var skunkTextScale: CGFloat = 0.1
+    @State private var skunkTextRotation: Double = 0
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Rainbow background pulsing
+                LinearGradient(
+                    colors: [
+                        Color(hue: rainbowHue, saturation: 0.8, brightness: 1),
+                        Color(hue: rainbowHue + 0.5, saturation: 0.8, brightness: 1)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                // Spinning skunks everywhere!
+                ForEach(skunks) { skunk in
+                    SpinningSkunkView(skunk: skunk)
+                }
+
+                // "YOU GOT SKUNKED!" text
+                VStack(spacing: 10) {
+                    Text("YOU GOT")
+                        .font(.system(size: 50, weight: .black))
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 10)
+
+                    Text("SKUNKED!")
+                        .font(.system(size: 70, weight: .black))
+                        .foregroundColor(.white)
+                        .shadow(color: .black, radius: 10)
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+                }
+                .scaleEffect(skunkTextScale)
+                .rotationEffect(.degrees(skunkTextRotation))
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            }
+            .rotationEffect(.degrees(skunkedPlayer == 1 ? 180 : 0))
+            .onAppear {
+                startSkunkAttack(in: geometry.size)
+            }
+        }
+    }
+
+    func startSkunkAttack(in size: CGSize) {
+        // Generate tons of spinning skunks
+        for i in 0..<60 {
+            let startX = CGFloat.random(in: 0...size.width)
+            let startY = i % 2 == 0 ? CGFloat.random(in: -200...0) : CGFloat.random(in: size.height...(size.height + 200))
+
+            skunks.append(SpinningSkunk(
+                id: i,
+                x: startX,
+                y: startY,
+                targetX: CGFloat.random(in: 0...size.width),
+                targetY: CGFloat.random(in: 0...size.height),
+                scale: CGFloat.random(in: 0.8...2.5),
+                delay: Double(i) * 0.03
+            ))
+        }
+
+        // Text explosion
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.4)) {
+            skunkTextScale = 1.0
+        }
+
+        // Text wobble
+        withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+            skunkTextRotation = 5
+        }
+
+        // Rainbow background
+        withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
+            rainbowHue = 1.0
+        }
+
+        // Haptics
+        startSkunkHaptics()
+    }
+
+    func startSkunkHaptics() {
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+
+        // Intense haptic pattern
+        for i in 0..<25 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.15) {
+                generator.impactOccurred(intensity: 1.0)
+            }
+        }
+    }
+}
+
+struct SpinningSkunk: Identifiable {
+    let id: Int
+    let x: CGFloat
+    let y: CGFloat
+    let targetX: CGFloat
+    let targetY: CGFloat
+    let scale: CGFloat
+    let delay: Double
+}
+
+struct SpinningSkunkView: View {
+    let skunk: SpinningSkunk
+    @State private var position: CGPoint
+    @State private var rotation: Double = 0
+    @State private var opacity: Double = 0
+
+    init(skunk: SpinningSkunk) {
+        self.skunk = skunk
+        _position = State(initialValue: CGPoint(x: skunk.x, y: skunk.y))
+    }
+
+    var body: some View {
+        Text("🦨")
+            .font(.system(size: 60))
+            .scaleEffect(skunk.scale)
+            .rotationEffect(.degrees(rotation))
+            .opacity(opacity)
+            .position(position)
+            .onAppear {
+                // Fly to target
+                withAnimation(.easeOut(duration: 1.2).delay(skunk.delay)) {
+                    position = CGPoint(x: skunk.targetX, y: skunk.targetY)
+                    opacity = 1.0
+                }
+
+                // Spin like crazy (2D only)
+                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false).delay(skunk.delay)) {
+                    rotation = 360
+                }
+
+                // Fade out eventually
+                withAnimation(.easeIn(duration: 1.0).delay(skunk.delay + 4.0)) {
+                    opacity = 0
+                }
+            }
+    }
+}
+
+// MARK: - Crazy New Game Button
+struct CrazyNewGameButton: View {
+    let action: () -> Void
+    @State private var scale: CGFloat = 1.0
+    @State private var rotation: Double = 0
+    @State private var glowIntensity: Double = 0
+    @State private var rainbowHue: Double = 0
+
+    var body: some View {
+        Button(action: action) {
+            Text("NEW GAME")
+                .font(.system(size: 36, weight: .black))
+                .foregroundColor(.white)
+                .padding(.horizontal, 40)
+                .padding(.vertical, 20)
+                .background(
+                    ZStack {
+                        // Rainbow animated background
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(hue: rainbowHue, saturation: 1, brightness: 1),
+                                        Color(hue: rainbowHue + 0.3, saturation: 1, brightness: 1)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+
+                        // Pulsing glow
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white, lineWidth: 4)
+                            .blur(radius: glowIntensity)
+                    }
+                )
+                .shadow(color: Color(hue: rainbowHue, saturation: 1, brightness: 1), radius: 20)
+                .scaleEffect(scale)
+                .rotation3DEffect(.degrees(rotation), axis: (x: 0, y: 1, z: 0))
+        }
+        .position(x: UIScreen.main.bounds.width / 2, y: UIScreen.main.bounds.height / 2 + 200)
+        .onAppear {
+            startCrazyAnimations()
+        }
+    }
+
+    func startCrazyAnimations() {
+        // Pulsing scale
+        withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+            scale = 1.2
+        }
+
+        // Rainbow color cycle
+        withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
+            rainbowHue = 1.0
+        }
+
+        // Glow pulse
+        withAnimation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true)) {
+            glowIntensity = 10
+        }
+
+        // Subtle 3D rotation
+        withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+            rotation = 360
+        }
     }
 }
 
