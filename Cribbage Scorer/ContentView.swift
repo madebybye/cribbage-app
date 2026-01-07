@@ -7,6 +7,13 @@
 
 import SwiftUI
 import Combine
+import UIKit
+
+// MARK: - Haptic Feedback Helper
+func hapticFeedback() {
+    let generator = UIImpactFeedbackGenerator(style: .light)
+    generator.impactOccurred()
+}
 
 // MARK: - Game Model
 struct Game: Identifiable, Codable {
@@ -436,6 +443,7 @@ struct PlayerSection: View {
                         .font(.system(size: 120, weight: .bold))
                         .foregroundColor(mainScoreColor)
                         .onLongPressGesture {
+                            hapticFeedback()
                             onLongPress()
                         }
                         .padding(.bottom, 8)
@@ -445,9 +453,11 @@ struct PlayerSection: View {
                         .font(.system(size: 45, weight: .medium))
                         .foregroundColor(foregroundColor.opacity(0.6))
                         .onTapGesture {
+                            hapticFeedback()
                             onFloatingScoreTap()
                         }
                         .onLongPressGesture {
+                            hapticFeedback()
                             onLongPress()
                         }
 
@@ -481,9 +491,11 @@ struct PlayerSection: View {
                         .foregroundColor(foregroundColor.opacity(0.6))
                         .rotationEffect(.degrees(isRotated ? 90 : -90))
                         .onTapGesture {
+                            hapticFeedback()
                             onGamesWonTap()
                         }
                         .onLongPressGesture {
+                            hapticFeedback()
                             onGamesWonLongPress()
                         }
                         .position(
@@ -505,7 +517,10 @@ struct ScoreButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            hapticFeedback()
+            action()
+        }) {
             ZStack {
                 Circle()
                     .fill(backgroundColor == .black ? Color.white : Color.black)
@@ -928,7 +943,10 @@ struct CrazyNewGameButton: View {
     @State private var rainbowHue: Double = 0
 
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            hapticFeedback()
+            action()
+        }) {
             Text("NEW GAME")
                 .font(.system(size: 36, weight: .black))
                 .foregroundColor(.white)
@@ -1025,10 +1043,12 @@ struct GameListSheet: View {
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
+                        hapticFeedback()
                         viewModel.switchToGame(id: game.id)
                         dismiss()
                     }
                     .onLongPressGesture {
+                        hapticFeedback()
                         gameToRename = game.id
                         renameGameName = game.name
                         renamePlayer1GamesWon = String(game.player1GamesWon)
@@ -1037,6 +1057,7 @@ struct GameListSheet: View {
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
+                            hapticFeedback()
                             gameToDelete = game.id
                             showDeleteConfirmation = true
                         } label: {
@@ -1050,6 +1071,7 @@ struct GameListSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
+                        hapticFeedback()
                         dismiss()
                     } label: {
                         Text("Close")
@@ -1059,6 +1081,7 @@ struct GameListSheet: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        hapticFeedback()
                         showNewGameAlert = true
                     } label: {
                         Image(systemName: "plus")
