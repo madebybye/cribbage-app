@@ -284,6 +284,7 @@ struct PlayerSection: View {
 
     // Adjustable margin from middle divider
     let gamesWonVerticalMargin: CGFloat = 30
+    let gamesWonHorizontalMargin: CGFloat = 40
 
     var body: some View {
         GeometryReader { geometry in
@@ -336,32 +337,19 @@ struct PlayerSection: View {
                     .padding(.bottom, 60)
                 }
 
-                // Games Won - positioned symmetrically from middle divider
-                // Bottom player: top of section IS the middle divider
-                // Top player: bottom of section IS the middle divider (before rotation)
+                // Games Won - positioned symmetrically from middle divider on right side
                 GeometryReader { geo in
-                    if !isRotated {
-                        // Bottom player: positioned from top of section (middle divider), margin down
-                        Text("\(gamesWon)")
-                            .font(.system(size: 45, weight: .medium))
-                            .foregroundColor(foregroundColor.opacity(0.6))
-                            .rotationEffect(.degrees(-90))
-                            .onLongPressGesture {
-                                onGamesWonLongPress()
-                            }
-                            .position(x: geo.size.width - 40, y: gamesWonVerticalMargin)
-                    } else {
-                        // Top player: positioned from top of section, margin down toward middle
-                        // X position on left before rotation = right side after 180° rotation
-                        Text("\(gamesWon)")
-                            .font(.system(size: 45, weight: .medium))
-                            .foregroundColor(foregroundColor.opacity(0.6))
-                            .rotationEffect(.degrees(90))
-                            .onLongPressGesture {
-                                onGamesWonLongPress()
-                            }
-                            .position(x: 40, y: gamesWonVerticalMargin)
-                    }
+                    Text("\(gamesWon)")
+                        .font(.system(size: 45, weight: .medium))
+                        .foregroundColor(foregroundColor.opacity(0.6))
+                        .rotationEffect(.degrees(isRotated ? 90 : -90))
+                        .onLongPressGesture {
+                            onGamesWonLongPress()
+                        }
+                        .position(
+                            x: isRotated ? gamesWonHorizontalMargin : geo.size.width - gamesWonHorizontalMargin,
+                            y: gamesWonVerticalMargin
+                        )
                 }
             }
         }
