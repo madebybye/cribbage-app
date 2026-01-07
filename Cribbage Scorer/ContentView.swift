@@ -34,6 +34,18 @@ class GameViewModel: ObservableObject {
         }
     }
 
+    @Published var player1GamesWon: Int {
+        didSet {
+            UserDefaults.standard.set(player1GamesWon, forKey: "player1GamesWon")
+        }
+    }
+
+    @Published var player2GamesWon: Int {
+        didSet {
+            UserDefaults.standard.set(player2GamesWon, forKey: "player2GamesWon")
+        }
+    }
+
     @Published var showWinnerModal = false
     @Published var showConfetti = false
     @Published var showSkunk = false
@@ -49,6 +61,8 @@ class GameViewModel: ObservableObject {
         self.player1FloatingScore = UserDefaults.standard.integer(forKey: "player1FloatingScore")
         self.player2MainScore = UserDefaults.standard.integer(forKey: "player2MainScore")
         self.player2FloatingScore = UserDefaults.standard.integer(forKey: "player2FloatingScore")
+        self.player1GamesWon = UserDefaults.standard.integer(forKey: "player1GamesWon")
+        self.player2GamesWon = UserDefaults.standard.integer(forKey: "player2GamesWon")
     }
 
     func addToFloatingScore(player: Int, value: Int) {
@@ -78,6 +92,13 @@ class GameViewModel: ObservableObject {
         if winnerScore >= winningScore {
             winner = "Player \(playerNumber)"
 
+            // Increment games won for the winner
+            if playerNumber == 1 {
+                player1GamesWon += 1
+            } else {
+                player2GamesWon += 1
+            }
+
             // Check if opponent got SKUNKED! (loser has 90 or less when winner hits 121)
             if winnerScore - loserScore > skunkDifference {
                 showSkunk = true
@@ -105,12 +126,18 @@ class GameViewModel: ObservableObject {
         winner = nil
         skunkedPlayer = nil
     }
+
+    func resetGamesWon() {
+        player1GamesWon = 0
+        player2GamesWon = 0
+    }
 }
 
 // MARK: - Content View
 struct ContentView: View {
     @StateObject private var viewModel = GameViewModel()
     @State private var showResetConfirmation = false
+    @State private var showResetGamesWonConfirmation = false
 
     // Danger color for when player is 30+ points behind (#EE0000)
     let dangerColor = Color(red: 0xEE / 255.0, green: 0x00 / 255.0, blue: 0x00 / 255.0)
@@ -131,6 +158,7 @@ struct ContentView: View {
                 PlayerSection(
                     mainScore: viewModel.player1MainScore,
                     floatingScore: viewModel.player1FloatingScore,
+                    gamesWon: viewModel.player1GamesWon,
                     backgroundColor: .black,
                     foregroundColor: player1InDanger ? dangerColor : .white,
                     isRotated: true,
@@ -142,6 +170,9 @@ struct ContentView: View {
                     },
                     onLongPress: {
                         showResetConfirmation = true
+                    },
+                    onGamesWonLongPress: {
+                        showResetGamesWonConfirmation = true
                     }
                 )
 
@@ -177,6 +208,7 @@ struct ContentView: View {
                 PlayerSection(
                     mainScore: viewModel.player2MainScore,
                     floatingScore: viewModel.player2FloatingScore,
+                    gamesWon: viewModel.player2GamesWon,
                     backgroundColor: .white,
                     foregroundColor: player2InDanger ? dangerColor : .black,
                     isRotated: false,
@@ -188,6 +220,9 @@ struct ContentView: View {
                     },
                     onLongPress: {
                         showResetConfirmation = true
+                    },
+                    onGamesWonLongPress: {
+                        showResetGamesWonConfirmation = true
                     }
                 )
             }
@@ -223,6 +258,14 @@ struct ContentView: View {
         } message: {
             Text("This will reset both players' scores to 0.")
         }
+        .alert("Reset Games Won?", isPresented: $showResetGamesWonConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) {
+                viewModel.resetGamesWon()
+            }
+        } message: {
+            Text("This will reset the games won tally to 0 for both players. This cannot be undone.")
+        }
     }
 }
 
@@ -230,12 +273,17 @@ struct ContentView: View {
 struct PlayerSection: View {
     let mainScore: Int
     let floatingScore: Int
+    let gamesWon: Int
     let backgroundColor: Color
     let foregroundColor: Color
     let isRotated: Bool
     let onScoreButtonTap: (Int) -> Void
     let onFloatingScoreTap: () -> Void
     let onLongPress: () -> Void
+    let onGamesWonLongPress: () -> Void
+
+    // Adjustable margin from middle divider
+    let gamesWonVerticalMargin: CGFloat = 30
 
     var body: some View {
         GeometryReader { geometry in
@@ -286,6 +334,34 @@ struct PlayerSection: View {
                         }
                     }
                     .padding(.bottom, 60)
+                }
+
+                // Games Won - positioned symmetrically from middle divider
+                // Bottom player: top of section IS the middle divider
+                // Top player: bottom of section IS the middle divider (before rotation)
+                GeometryReader { geo in
+                    if !isRotated {
+                        // Bottom player: positioned from top of section (middle divider), margin down
+                        Text("\(gamesWon)")
+                            .font(.system(size: 45, weight: .medium))
+                            .foregroundColor(foregroundColor.opacity(0.6))
+                            .rotationEffect(.degrees(-90))
+                            .onLongPressGesture {
+                                onGamesWonLongPress()
+                            }
+                            .position(x: geo.size.width - 40, y: gamesWonVerticalMargin)
+                    } else {
+                        // Top player: positioned from top of section, margin down toward middle
+                        // X position on left before rotation = right side after 180° rotation
+                        Text("\(gamesWon)")
+                            .font(.system(size: 45, weight: .medium))
+                            .foregroundColor(foregroundColor.opacity(0.6))
+                            .rotationEffect(.degrees(90))
+                            .onLongPressGesture {
+                                onGamesWonLongPress()
+                            }
+                            .position(x: 40, y: gamesWonVerticalMargin)
+                    }
                 }
             }
         }
