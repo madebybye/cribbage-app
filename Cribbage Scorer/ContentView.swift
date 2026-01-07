@@ -151,6 +151,18 @@ struct ContentView: View {
         viewModel.player1MainScore - viewModel.player2MainScore >= 30
     }
 
+    // Danger color for when player is 30+ points behind (#EE0000)
+    let dangerColor = Color(red: 0xEE / 255.0, green: 0x00 / 255.0, blue: 0x00 / 255.0)
+
+    // Check if players are in danger of being skunked
+    var player1InDanger: Bool {
+        viewModel.player2MainScore - viewModel.player1MainScore >= 30
+    }
+
+    var player2InDanger: Bool {
+        viewModel.player1MainScore - viewModel.player2MainScore >= 30
+    }
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
