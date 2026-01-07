@@ -284,7 +284,8 @@ struct ContentView: View {
                     floatingScore: viewModel.player1FloatingScore,
                     gamesWon: viewModel.player1GamesWon,
                     backgroundColor: .black,
-                    foregroundColor: player1InDanger ? dangerColor : .white,
+                    foregroundColor: .white,
+                    mainScoreColor: player1InDanger ? dangerColor : .white,
                     isRotated: true,
                     onScoreButtonTap: { value in
                         viewModel.addToFloatingScore(player: 1, value: value)
@@ -337,7 +338,8 @@ struct ContentView: View {
                     floatingScore: viewModel.player2FloatingScore,
                     gamesWon: viewModel.player2GamesWon,
                     backgroundColor: .white,
-                    foregroundColor: player2InDanger ? dangerColor : .black,
+                    foregroundColor: .black,
+                    mainScoreColor: player2InDanger ? dangerColor : .black,
                     isRotated: false,
                     onScoreButtonTap: { value in
                         viewModel.addToFloatingScore(player: 2, value: value)
@@ -409,6 +411,7 @@ struct PlayerSection: View {
     let gamesWon: Int
     let backgroundColor: Color
     let foregroundColor: Color
+    let mainScoreColor: Color
     let isRotated: Bool
     let onScoreButtonTap: (Int) -> Void
     let onFloatingScoreTap: () -> Void
@@ -431,7 +434,7 @@ struct PlayerSection: View {
                     // Main Score
                     Text("\(mainScore)")
                         .font(.system(size: 120, weight: .bold))
-                        .foregroundColor(foregroundColor)
+                        .foregroundColor(mainScoreColor)
                         .onLongPressGesture {
                             onLongPress()
                         }
