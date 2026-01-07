@@ -38,6 +38,7 @@ class GameViewModel: ObservableObject {
     @Published var showConfetti = false
     @Published var showSkunk = false
     @Published var winner: String?
+    @Published var skunkedPlayer: Int? // 1 or 2, the player who got skunked
 
     let winningScore = 121
     let skunkDifference = 30
@@ -81,9 +82,12 @@ class GameViewModel: ObservableObject {
             if winnerScore - loserScore > skunkDifference {
                 showSkunk = true
                 showConfetti = false
+                // Track which player got skunked (the loser)
+                skunkedPlayer = playerNumber == 1 ? 2 : 1
             } else {
                 showSkunk = false
                 showConfetti = true
+                skunkedPlayer = nil
             }
 
             showWinnerModal = true
@@ -99,6 +103,7 @@ class GameViewModel: ObservableObject {
         showConfetti = false
         showSkunk = false
         winner = nil
+        skunkedPlayer = nil
     }
 }
 
@@ -106,6 +111,18 @@ class GameViewModel: ObservableObject {
 struct ContentView: View {
     @StateObject private var viewModel = GameViewModel()
     @State private var showResetConfirmation = false
+
+    // Danger color for when player is 30+ points behind (#EE0000)
+    let dangerColor = Color(red: 0xEE / 255.0, green: 0x00 / 255.0, blue: 0x00 / 255.0)
+
+    // Check if players are in danger of being skunked
+    var player1InDanger: Bool {
+        viewModel.player2MainScore - viewModel.player1MainScore >= 30
+    }
+
+    var player2InDanger: Bool {
+        viewModel.player1MainScore - viewModel.player2MainScore >= 30
+    }
 
     var body: some View {
         ZStack {
@@ -115,7 +132,7 @@ struct ContentView: View {
                     mainScore: viewModel.player1MainScore,
                     floatingScore: viewModel.player1FloatingScore,
                     backgroundColor: .black,
-                    foregroundColor: .white,
+                    foregroundColor: player1InDanger ? dangerColor : .white,
                     isRotated: true,
                     onScoreButtonTap: { value in
                         viewModel.addToFloatingScore(player: 1, value: value)
@@ -128,12 +145,40 @@ struct ContentView: View {
                     }
                 )
 
+                // Progress bars at the middle divider
+                VStack(spacing: 0) {
+                    // Top player's white progress bar
+                    GeometryReader { geometry in
+                        HStack(spacing: 0) {
+                            Rectangle()
+                                .fill(player1InDanger ? dangerColor : Color.white)
+                                .frame(width: geometry.size.width * CGFloat(min(viewModel.player1MainScore, 121)) / 121.0)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .frame(height: 10)
+                    .background(Color.black)
+
+                    // Bottom player's black progress bar
+                    GeometryReader { geometry in
+                        HStack(spacing: 0) {
+                            Rectangle()
+                                .fill(player2InDanger ? dangerColor : Color.black)
+                                .frame(width: geometry.size.width * CGFloat(min(viewModel.player2MainScore, 121)) / 121.0)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .frame(height: 10)
+                    .background(Color.white)
+                }
+                .frame(height: 20)
+
                 // Bottom Player (Player 2)
                 PlayerSection(
                     mainScore: viewModel.player2MainScore,
                     floatingScore: viewModel.player2FloatingScore,
                     backgroundColor: .white,
-                    foregroundColor: .black,
+                    foregroundColor: player2InDanger ? dangerColor : .black,
                     isRotated: false,
                     onScoreButtonTap: { value in
                         viewModel.addToFloatingScore(player: 2, value: value)
@@ -157,7 +202,7 @@ struct ContentView: View {
 
             // SKUNK overlay
             if viewModel.showSkunk {
-                SkunkView()
+                SkunkView(skunkedPlayer: viewModel.skunkedPlayer ?? 2)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
@@ -524,6 +569,7 @@ struct DiscoEmojiView: View {
 
 // MARK: - SKUNK ATTACK 🦨
 struct SkunkView: View {
+    let skunkedPlayer: Int // 1 = top player, 2 = bottom player
     @State private var skunks: [SpinningSkunk] = []
     @State private var rainbowHue: Double = 0
     @State private var skunkTextScale: CGFloat = 0.1
@@ -566,6 +612,7 @@ struct SkunkView: View {
                 .rotationEffect(.degrees(skunkTextRotation))
                 .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
             }
+            .rotationEffect(.degrees(skunkedPlayer == 1 ? 180 : 0))
             .onAppear {
                 startSkunkAttack(in: geometry.size)
             }
