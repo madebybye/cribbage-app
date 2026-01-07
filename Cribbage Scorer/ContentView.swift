@@ -44,6 +44,18 @@ class GameViewModel: ObservableObject {
     @Published var player1FloatingScore: Int = 0
     @Published var player2FloatingScore: Int = 0
 
+    @Published var player1GamesWon: Int {
+        didSet {
+            UserDefaults.standard.set(player1GamesWon, forKey: "player1GamesWon")
+        }
+    }
+
+    @Published var player2GamesWon: Int {
+        didSet {
+            UserDefaults.standard.set(player2GamesWon, forKey: "player2GamesWon")
+        }
+    }
+
     @Published var showWinnerModal = false
     @Published var showConfetti = false
     @Published var showSkunk = false
